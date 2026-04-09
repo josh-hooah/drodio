@@ -1,7 +1,8 @@
 const express = require('express');
-const http = require('http');
+const http = require('https');
 const socketIO = require('socket.io');
 const path = require('path');
+const socket = io("https://your-app-name.onrender.com");
 
 const app = express();
 const server = http.createServer(app);
@@ -13,7 +14,7 @@ const io = socketIO(server, {
 });
 
 // Serve static files
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(path.join(__dirname, "public")));
 
 // Store connected users
 const users = new Map();
