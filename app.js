@@ -22,14 +22,13 @@ const chatMessages = document.getElementById('chatMessages');
 const chatInput = document.getElementById('chatInput');
 const sendChatBtn = document.getElementById('sendChat');
 
-// Configuration
+
 const rtcConfig = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' }
   ]
 };
 
-// Initialize
 function init() {
   roleInputs.forEach(input => {
     input.addEventListener('change', () => {
@@ -38,14 +37,15 @@ function init() {
     });
   });
 
-  joinStreamBtn.addEventListener('click', joinStream);
-  toggleVideoBtn.addEventListener('click', toggleVideo);
-  toggleAudioBtn.addEventListener('click', toggleAudio);
-  startStreamBtn.addEventListener('click', startStream);
-  endStreamBtn.addEventListener('click', endStream);
-  switchCameraBtn.addEventListener('click', switchCamera);
-  sendChatBtn.addEventListener('click', sendChat);
-  chatInput.addEventListener('keypress', (e) => {
+  joinStreamBtn.onclick = joinStream;
+  toggleVideoBtn.onclick = toggleVideo;
+  toggleAudioBtn.onclick = toggleAudio;
+  startStreamBtn.onclick = startStream;
+  endStreamBtn.onclick = endStream;
+  switchCameraBtn.onclick = switchCamera;
+  sendChatBtn.onclick = sendChat;
+
+  chatInput.addEventListener('keypress', e => {
     if (e.key === 'Enter') sendChat();
   });
 
@@ -53,29 +53,19 @@ function init() {
 }
 
 function updateUI() {
-  const controls = document.getElementById('controls');
-  if (isHost) {
-    controls.style.display = 'flex';
-    startStreamBtn.style.display = 'inline-block';
-    endStreamBtn.style.display = 'inline-block';
-  } else {
-    controls.style.display = 'none';
-  }
+  document.getElementById('controls').style.display = isHost ? 'flex' : 'none';
 }
 
 async function joinStream() {
   username = usernameInput.value.trim() || 'Anonymous';
+
   socket.emit('register', { username, isHost });
 
   if (isHost) {
     await getLocalStream();
-  } else {
-    // Viewer requests stream if active
-    socket.emit('request-stream');
   }
 
   statusDiv.textContent = 'Joined';
-  statusDiv.className = 'status status-connected';
   joinStreamBtn.disabled = true;
 }
 
@@ -86,237 +76,179 @@ async function getLocalStream() {
       audio: true
     });
     localVideo.srcObject = localStream;
-    toggleVideoBtn.classList.remove('inactive');
-    toggleVideoBtn.classList.add('active');
-    toggleAudioBtn.classList.remove('inactive');
-    toggleAudioBtn.classList.add('active');
-  } catch (error) {
-    console.error('Error accessing media devices:', error);
-    alert('Could not access camera/microphone');
+  } catch (err) {
+    alert('Camera/Mic error');
   }
 }
 
 function toggleVideo() {
-  if (localStream) {
-    const videoTrack = localStream.getVideoTracks()[0];
-    if (videoTrack) {
-      videoTrack.enabled = !videoTrack.enabled;
-      toggleVideoBtn.classList.toggle('active', videoTrack.enabled);
-      toggleVideoBtn.classList.toggle('inactive', !videoTrack.enabled);
-    }
-  }
+  const track = localStream?.getVideoTracks()[0];
+  if (track) track.enabled = !track.enabled;
 }
 
 function toggleAudio() {
-  if (localStream) {
-    const audioTrack = localStream.getAudioTracks()[0];
-    if (audioTrack) {
-      audioTrack.enabled = !audioTrack.enabled;
-      toggleAudioBtn.classList.toggle('active', audioTrack.enabled);
-      toggleAudioBtn.classList.toggle('inactive', !audioTrack.enabled);
-    }
-  }
+  const track = localStream?.getAudioTracks()[0];
+  if (track) track.enabled = !track.enabled;
 }
 
 async function startStream() {
-  if (!localStream || !isHost) return;
+  if (!localStream) return;
 
   isStreaming = true;
-  startStreamBtn.disabled = true;
-  endStreamBtn.disabled = false;
-
-  // Notify server that stream started
   socket.emit('start-stream');
 
-  statusDiv.textContent = 'Streaming';
+  // Send to existing viewers
+  users.forEach(user => {
+    if (!user.isHost && user.socketId !== socket.id) {
+      createOffer(user.socketId);
+    }
+  });
 
-  // Create offers for existing viewers
-  const viewers = users.filter(user => !user.isHost && user.socketId !== socket.id);
-  for (const viewer of viewers) {
-    await createOfferForViewer(viewer.socketId);
-  }
+  statusDiv.textContent = 'Streaming';
 }
 
 function endStream() {
   isStreaming = false;
-  startStreamBtn.disabled = false;
-  endStreamBtn.disabled = true;
 
-  // Close all peer connections
   Object.values(peerConnections).forEach(pc => pc.close());
   peerConnections = {};
 
   socket.emit('end-stream');
-  statusDiv.textContent = 'Ready';
-  statusDiv.className = 'status status-idle';
-}
-
-async function switchCamera() {
-  if (!localStream) return;
-
-  const videoTrack = localStream.getVideoTracks()[0];
-  if (videoTrack) {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const videoDevices = devices.filter(device => device.kind === 'videoinput');
-
-    if (videoDevices.length > 1) {
-      // Simple switch - in real app, would track current device
-      localStream.getVideoTracks().forEach(track => track.stop());
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { deviceId: videoDevices[1].deviceId },
-        audio: true
-      });
-      localStream = newStream;
-      localVideo.srcObject = localStream;
-    }
-  }
+  statusDiv.textContent = 'Stopped';
 }
 
 function sendChat() {
-  const message = chatInput.value.trim();
-  if (message) {
-    socket.emit('chat', { message, username });
-    chatInput.value = '';
-  }
+  const msg = chatInput.value.trim();
+  if (!msg) return;
+
+  socket.emit('chat', { message: msg, username });
+  chatInput.value = '';
 }
 
-// Socket event handlers
-socket.on('user-list', (userListData) => {
-  users = userListData;
+// SOCKET EVENTS
+
+socket.on('user-list', data => {
+  users = data;
+
   userList.innerHTML = '';
-  userListData.forEach(user => {
+  data.forEach(user => {
     const li = document.createElement('li');
-    li.className = 'user-item';
-    if (user.socketId === socket.id) li.classList.add('self');
-    li.textContent = user.username + (user.isHost ? ' (Host)' : ' (Viewer)');
+    li.textContent = user.username + (user.isHost ? ' (Host)' : '');
     userList.appendChild(li);
   });
 });
 
-socket.on('stream-started', async (hostId) => {
-  if (!isHost && hostId !== socket.id) {
-    // Viewer joins the stream
-    await createViewerConnection(hostId);
-  }
-});
-
-socket.on('viewer-joined', async (viewerId) => {
+socket.on('viewer-joined', viewerId => {
   if (isHost && isStreaming) {
-    await createOfferForViewer(viewerId);
+    createOffer(viewerId);
   }
 });
 
-socket.on('stream-offer', async (data) => {
+socket.on('stream-started', hostId => {
   if (!isHost) {
-    const { from, offer } = data;
-    await handleOffer(from, offer);
+    socket.emit('request-stream', { hostId });
   }
 });
 
-socket.on('stream-answer', (data) => {
-  if (isHost) {
-    const { from, answer } = data;
-    const pc = peerConnections[from];
-    if (pc) {
-      pc.setRemoteDescription(new RTCSessionDescription(answer));
-    }
-  }
-});
+socket.on('stream-offer', async ({ from, offer }) => {
+  if (isHost) return;
 
-socket.on('ice-candidate', (data) => {
-  const { from, candidate } = data;
-  const pc = peerConnections[from];
-  if (pc) {
-    pc.addIceCandidate(new RTCIceCandidate(candidate));
-  }
-});
+  const pc = createPeerConnection(from);
 
-socket.on('stream-ended', () => {
-  if (!isHost) {
-    remoteVideo.srcObject = null;
-    Object.values(peerConnections).forEach(pc => pc.close());
-    peerConnections = {};
-    statusDiv.textContent = 'Stream ended';
-    statusDiv.className = 'status status-idle';
-  }
-});
+  await pc.setRemoteDescription(offer);
 
-socket.on('chat', (data) => {
-  const div = document.createElement('div');
-  div.className = 'chat-message';
-  div.textContent = `${data.username}: ${data.message}`;
-  chatMessages.appendChild(div);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-});
-
-// WebRTC functions
-async function createOfferForViewer(viewerId) {
-  const pc = new RTCPeerConnection(rtcConfig);
-  peerConnections[viewerId] = pc;
-
-  // Add local stream tracks
-  localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-  pc.onicecandidate = (event) => {
-    if (event.candidate) {
-      socket.emit('ice-candidate', { to: viewerId, candidate: event.candidate });
-    }
-  };
-
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-
-  socket.emit('stream-offer', { to: viewerId, offer });
-}
-
-async function createViewerConnection(hostId) {
-  const pc = new RTCPeerConnection(rtcConfig);
-  peerConnections[hostId] = pc;
-
-  pc.ontrack = (event) => {
-    if (event.streams[0]) {
-      remoteVideo.srcObject = event.streams[0];
-    }
-  };
-
-  pc.onicecandidate = (event) => {
-    if (event.candidate) {
-      socket.emit('ice-candidate', { to: hostId, candidate: event.candidate });
-    }
-  };
-
-  // Request offer from host
-  socket.emit('request-stream');
-}
-
-async function handleOffer(from, offer) {
-  const pc = new RTCPeerConnection(rtcConfig);
-  peerConnections[from] = pc;
-
-  pc.ontrack = (event) => {
-    if (event.streams[0]) {
-      remoteVideo.srcObject = event.streams[0];
-    }
-  };
-
-  pc.onicecandidate = (event) => {
-    if (event.candidate) {
-      socket.emit('ice-candidate', { to: from, candidate: event.candidate });
-    }
-  };
-
-  await pc.setRemoteDescription(new RTCSessionDescription(offer));
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
 
   socket.emit('stream-answer', { to: from, answer });
+});
+
+socket.on('stream-answer', async ({ from, answer }) => {
+  const pc = peerConnections[from];
+  if (!pc) return;
+
+  await pc.setRemoteDescription(answer);
+});
+
+socket.on('ice-candidate', async ({ from, candidate }) => {
+  const pc = peerConnections[from];
+  if (!pc || !candidate) return;
+
+  try {
+    await pc.addIceCandidate(candidate);
+  } catch (e) {
+    console.warn('ICE error', e);
+  }
+});
+
+socket.on('stream-ended', () => {
+  remoteVideo.srcObject = null;
+
+  Object.values(peerConnections).forEach(pc => pc.close());
+  peerConnections = {};
+
+  statusDiv.textContent = 'Stream ended';
+});
+
+socket.on('chat', data => {
+  const div = document.createElement('div');
+  div.textContent = `${data.username}: ${data.message}`;
+  chatMessages.appendChild(div);
+});
+
+// WEBRTC CORE
+
+function createPeerConnection(id) {
+  if (peerConnections[id]) return peerConnections[id];
+
+  const pc = new RTCPeerConnection(rtcConfig);
+  peerConnections[id] = pc;
+
+  pc.onicecandidate = e => {
+    if (e.candidate) {
+      socket.emit('ice-candidate', { to: id, candidate: e.candidate });
+    }
+  };
+
+  pc.ontrack = e => {
+    remoteVideo.srcObject = e.streams[0];
+  };
+
+  if (isHost && localStream) {
+    localStream.getTracks().forEach(track => {
+      pc.addTrack(track, localStream);
+    });
+  }
+
+  return pc;
 }
 
-// For host to send offers to viewers
-async function sendOffersToViewers() {
-  const users = Array.from(document.querySelectorAll('.user-item')).map(li => li.textContent);
-  // Need to get viewer ids from server
-  // For simplicity, assume server sends viewer list
+async function createOffer(viewerId) {
+  const pc = createPeerConnection(viewerId);
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  socket.emit('stream-offer', {
+    to: viewerId,
+    offer
+  });
+}
+
+// CAMERA SWITCH 
+async function switchCamera() {
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  const cams = devices.filter(d => d.kind === 'videoinput');
+
+  if (cams.length < 2) return;
+
+  const newStream = await navigator.mediaDevices.getUserMedia({
+    video: { deviceId: cams[1].deviceId },
+    audio: true
+  });
+
+  localStream = newStream;
+  localVideo.srcObject = newStream;
 }
 
 init();
