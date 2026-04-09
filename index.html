@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Video Chat - 1v1</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 20px;
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        .video-section {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .video-container {
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+            position: relative;
+        }
+
+        video {
+            width: 100%;
+            height: auto;
+            display: block;
+            min-height: 400px;
+        }
+
+        .remote-video-container {
+            grid-column: 1;
+        }
+
+        .local-video-container {
+            max-width: 250px;
+            position: absolute;
+            bottom: 15px;
+            right: 15px;
+            border: 3px solid white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            background: #000;
+        }
+
+        .local-video-container video {
+            min-height: 200px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-success {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #38a169;
+        }
+
+        .btn-danger {
+            background: #f56565;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+
+        .btn-warning {
+            background: #ed8936;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #dd6b20;
+        }
+
+        .btn-icon {
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            padding: 0;
+            font-size: 20px;
+        }
+
+        .btn-icon.active {
+            background: #48bb78;
+        }
+
+        .btn-icon.inactive {
+            background: #f56565;
+        }
+
+        .sidebar {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .sidebar h3 {
+            margin-bottom: 15px;
+            color: #2d3748;
+            font-size: 16px;
+        }
+
+        .username-input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .username-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .user-list {
+            list-style: none;
+        }
+
+        .user-item {
+            padding: 10px;
+            background: #f7fafc;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+        }
+
+        .user-item.self {
+            background: #c6f6d5;
+            font-weight: 600;
+        }
+
+        .user-item .username {
+            flex: 1;
+            word-break: break-word;
+            margin-right: 10px;
+        }
+
+        .call-button {
+            padding: 5px 10px;
+            font-size: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .call-button:hover {
+            background: #5568d3;
+        }
+
+        .call-button:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+        }
+
+        .status {
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 12px;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .status-idle {
+            background: #e2e8f0;
+            color: #2d3748;
+        }
+
+        .status-connecting {
+            background: #fef5e7;
+            color: #7d6608;
+        }
+
+        .status-connected {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .status-error {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal.hidden {
+            display: none;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .modal-content h2 {
+            margin-bottom: 15px;
+            color: #2d3748;
+        }
+
+        .modal-content p {
+            margin-bottom: 20px;
+            color: #718096;
+        }
+
+        .incoming-call-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                max-height: 300px;
+            }
+
+            .local-video-container {
+                max-width: 150px;
+                min-height: 150px;
+            }
+
+            .local-video-container video {
+                min-height: 150px;
+            }
+
+            video {
+                min-height: 300px;
+            }
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="video-section">
+            <div class="video-container remote-video-container">
+                <video id="remoteVideo" playsinline></video>
+                <div class="local-video-container">
+                    <video id="localVideo" autoplay muted playsinline></video>
+                </div>
+            </div>
+            <div class="controls">
+                <button id="toggleVideo" class="btn-icon inactive" title="Toggle Video">
+                    🎥
+                </button>
+                <button id="toggleAudio" class="btn-icon inactive" title="Toggle Audio">
+                    🎤
+                </button>
+                <button id="endCall" class="btn-danger" disabled>
+                    End Call
+                </button>
+                <button id="switchCamera" class="btn-primary" title="Switch Camera">
+                    📱 Switch
+                </button>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <div class="status status-idle" id="status">
+                Ready
+            </div>
+
+            <h3>Your Name</h3>
+            <input 
+                type="text" 
+                id="usernameInput" 
+                class="username-input" 
+                placeholder="Enter your name"
+                maxlength="20"
+            >
+
+            <h3 style="margin-top: 20px;">Online Users</h3>
+            <ul class="user-list" id="userList">
+                <li class="user-item">No users online</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Incoming Call Modal -->
+    <div id="incomingCallModal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Incoming Call</h2>
+            <p id="callerName">User is calling...</p>
+            <div class="incoming-call-buttons">
+                <button id="acceptCall" class="btn-success">Accept</button>
+                <button id="rejectCall" class="btn-danger">Reject</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Connecting Modal -->
+    <div id="connectingModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="spinner"></div>
+            <h2>Connecting...</h2>
+            <p>Establishing connection...</p>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
