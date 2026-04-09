@@ -154,6 +154,52 @@
             box-shadow: 0 8px 24px rgba(0,0,0,0.1);
             max-height: 600px;
             overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            margin-top: 20px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            max-height: 300px;
+        }
+
+        .chat-message {
+            padding: 8px;
+            margin-bottom: 5px;
+            background: #f7fafc;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .chat-input {
+            display: flex;
+            gap: 5px;
+        }
+
+        .chat-input input {
+            flex: 1;
+            padding: 8px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .chat-input button {
+            padding: 8px 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
         }
 
         .sidebar h3 {
@@ -341,15 +387,18 @@
                     <video id="localVideo" autoplay muted playsinline></video>
                 </div>
             </div>
-            <div class="controls">
+            <div class="controls" id="controls">
                 <button id="toggleVideo" class="btn-icon inactive" title="Toggle Video">
                     🎥
                 </button>
                 <button id="toggleAudio" class="btn-icon inactive" title="Toggle Audio">
                     🎤
                 </button>
-                <button id="endCall" class="btn-danger" disabled>
-                    End Call
+                <button id="startStream" class="btn-success">
+                    Start Stream
+                </button>
+                <button id="endStream" class="btn-danger" disabled>
+                    End Stream
                 </button>
                 <button id="switchCamera" class="btn-primary" title="Switch Camera">
                     📱 Switch
@@ -371,10 +420,30 @@
                 maxlength="20"
             >
 
+            <div style="margin-top: 20px;">
+                <label>
+                    <input type="radio" name="role" value="host" checked> Host (Can speak)
+                </label>
+                <label style="margin-left: 10px;">
+                    <input type="radio" name="role" value="viewer"> Viewer (Listen & Chat)
+                </label>
+            </div>
+
+            <button id="joinStream" class="btn-primary" style="margin-top: 10px;">Join Stream</button>
+
             <h3 style="margin-top: 20px;">Online Users</h3>
             <ul class="user-list" id="userList">
                 <li class="user-item">No users online</li>
             </ul>
+
+            <div class="chat-section">
+                <h3>Chat</h3>
+                <div class="chat-messages" id="chatMessages"></div>
+                <div class="chat-input">
+                    <input type="text" id="chatInput" placeholder="Type a message..." maxlength="200">
+                    <button id="sendChat">Send</button>
+                </div>
+            </div>
         </div>
     </div>
 

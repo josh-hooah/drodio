@@ -17,64 +17,73 @@ app.use(express.static(path.join(__dirname)));
 
 // Store connected users
 const users = new Map();
+let streamHost = null;
 
 io.on('connection', (socket) => {
   console.log('New user connected:', socket.id);
 
-  socket.on('register', (username) => {
-    users.set(socket.id, { username, socketId: socket.id });
+  socket.on('register', (data) => {
+    const { username, isHost } = data;
+    users.set(socket.id, { username, socketId: socket.id, isHost });
+    if (isHost) {
+      streamHost = socket.id;
+    }
     io.emit('user-list', Array.from(users.values()));
-    console.log(`${username} registered`);
+    console.log(`${username} registered as ${isHost ? 'host' : 'viewer'}`);
   });
 
-  socket.on('call', (data) => {
+  socket.on('start-stream', () => {
+    if (socket.id === streamHost) {
+      io.emit('stream-started', socket.id);
+      console.log('Stream started by host');
+    }
+  });
+
+  socket.on('end-stream', () => {
+    if (socket.id === streamHost) {
+      io.emit('stream-ended');
+      streamHost = null;
+      console.log('Stream ended');
+    }
+  });
+
+  socket.on('request-stream', () => {
+    if (streamHost && streamHost !== socket.id) {
+      // Tell host to send offer to this viewer
+      io.to(streamHost).emit('viewer-joined', socket.id);
+    }
+  });
+
+  socket.on('stream-offer', (data) => {
     const { to, offer } = data;
-    io.to(to).emit('incoming-call', {
-      from: socket.id,
-      fromUsername: users.get(socket.id)?.username,
-      offer
-    });
-    console.log(`Call from ${socket.id} to ${to}`);
+    io.to(to).emit('stream-offer', { from: socket.id, offer });
   });
 
-  socket.on('accept-call', (data) => {
+  socket.on('stream-answer', (data) => {
     const { to, answer } = data;
-    io.to(to).emit('call-accepted', {
-      from: socket.id,
-      answer
-    });
-    console.log(`${socket.id} accepted call from ${to}`);
+    io.to(to).emit('stream-answer', { from: socket.id, answer });
   });
 
   socket.on('ice-candidate', (data) => {
     const { to, candidate } = data;
-    io.to(to).emit('ice-candidate', {
-      from: socket.id,
-      candidate
-    });
+    io.to(to).emit('ice-candidate', { from: socket.id, candidate });
   });
 
-  socket.on('reject-call', (data) => {
-    const { to } = data;
-    io.to(to).emit('call-rejected', {
-      from: socket.id
-    });
-    console.log(`${socket.id} rejected call from ${to}`);
-  });
-
-  socket.on('end-call', (data) => {
-    const { to } = data;
-    io.to(to).emit('call-ended', {
-      from: socket.id
-    });
-    console.log(`${socket.id} ended call with ${to}`);
+  socket.on('chat', (data) => {
+    io.emit('chat', { ...data, socketId: socket.id });
   });
 
   socket.on('disconnect', () => {
-    const username = users.get(socket.id)?.username;
-    users.delete(socket.id);
-    io.emit('user-list', Array.from(users.values()));
-    console.log(`${username} disconnected`);
+    const user = users.get(socket.id);
+    if (user) {
+      if (user.isHost && streamHost === socket.id) {
+        streamHost = null;
+        io.emit('stream-ended');
+      }
+      users.delete(socket.id);
+      io.emit('user-list', Array.from(users.values()));
+      console.log(`${user.username} disconnected`);
+    }
   });
 });
 
