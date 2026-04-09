@@ -131,7 +131,7 @@ async function startStream() {
   statusDiv.textContent = 'Streaming';
 
   // Create offers for existing viewers
-  const viewers = Array.from(users.values()).filter(user => !user.isHost && user.socketId !== socket.id);
+  const viewers = users.filter(user => !user.isHost && user.socketId !== socket.id);
   for (const viewer of viewers) {
     await createOfferForViewer(viewer.socketId);
   }
