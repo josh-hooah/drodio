@@ -2,7 +2,7 @@ const express = require('express');
 const http = require('https');
 const socketIO = require('socket.io');
 const path = require('path');
-const socket = io("https://your-app-name.onrender.com");
+const socket = io("https://drodio.onrender.com");
 
 const app = express();
 const server = http.createServer(app);
